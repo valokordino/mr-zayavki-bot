@@ -1,11 +1,11 @@
-import express from "express";
-import axios from "axios";
+const express = require("express");
+const axios = require("axios");
 
 const app = express();
 app.use(express.json());
 
 // ==== НАСТРОЙКИ ====
-const TOKEN = process.env.BOT_TOKEN; // токен твоего бота
+const TOKEN = process.env.BOT_TOKEN;       // токен бота
 const CHANNEL_ID = process.env.CHANNEL_ID; // chat_id канала УК
 const TELEGRAM_URL = `https://api.telegram.org/bot${TOKEN}`;
 
@@ -21,17 +21,24 @@ app.post("/webhook", async (req, res) => {
   const chatId = msg.chat.id;
   const text = msg.text;
 
-  // Ответ пользователю
-  await axios.post(`${TELEGRAM_URL}/sendMessage`, {
-    chat_id: chatId,
-    text: "Ваша заявка принята! Сотрудник увидит её в ближайшее время.",
-  });
+  try {
+    // Ответ пользователю
+    await axios.post(`${TELEGRAM_URL}/sendMessage`, {
+      chat_id: chatId,
+      text: "Ваша заявка принята! Сотрудник увидит её в ближайшее время.",
+    });
 
-  // Отправка заявки в канал УК
-  await axios.post(`${TELEGRAM_URL}/sendMessage`, {
-    chat_id: CHANNEL_ID,
-    text: `🛠 Новая заявка\n\nОт: ${msg.from.first_name} (@${msg.from.username || "нет"})\n\n${text}`
-  });
+    // Отправка заявки в канал УК
+    await axios.post(`${TELEGRAM_URL}/sendMessage`, {
+      chat_id: CHANNEL_ID,
+      text:
+        `🛠 Новая заявка\n\n` +
+        `От: ${msg.from.first_name || ""} (@${msg.from.username || "нет"})\n\n` +
+        text,
+    });
+  } catch (e) {
+    console.error("Telegram error:", e.response?.data || e.message);
+  }
 
   res.sendStatus(200);
 });
