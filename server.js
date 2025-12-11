@@ -1,0 +1,45 @@
+import express from "express";
+import axios from "axios";
+
+const app = express();
+app.use(express.json());
+
+// ==== НАСТРОЙКИ ====
+const TOKEN = process.env.BOT_TOKEN; // токен твоего бота
+const CHANNEL_ID = process.env.CHANNEL_ID; // chat_id канала УК
+const TELEGRAM_URL = `https://api.telegram.org/bot${TOKEN}`;
+
+// ==== ХЭНДЛЕР ВЕБХУКА ====
+app.post("/webhook", async (req, res) => {
+  const update = req.body;
+
+  if (!update.message || !update.message.text) {
+    return res.sendStatus(200);
+  }
+
+  const msg = update.message;
+  const chatId = msg.chat.id;
+  const text = msg.text;
+
+  // Ответ пользователю
+  await axios.post(`${TELEGRAM_URL}/sendMessage`, {
+    chat_id: chatId,
+    text: "Ваша заявка принята! Сотрудник увидит её в ближайшее время.",
+  });
+
+  // Отправка заявки в канал УК
+  await axios.post(`${TELEGRAM_URL}/sendMessage`, {
+    chat_id: CHANNEL_ID,
+    text: `🛠 Новая заявка\n\nОт: ${msg.from.first_name} (@${msg.from.username || "нет"})\n\n${text}`
+  });
+
+  res.sendStatus(200);
+});
+
+// ==== СТАРТ СЕРВЕРА ====
+app.get("/", (req, res) => {
+  res.send("Bot server is running!");
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
