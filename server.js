@@ -119,6 +119,14 @@ app.post("/webhook", async (req, res) => {
         reaction: [{ type: "emoji", emoji: "👌" }],
         is_big: false,
       });
+
+      return res.sendStatus(200);
+    } catch (e) {
+      console.error("Telegram error (reply):", e.response?.data || e.message);
+      return res.sendStatus(200);
+    }
+  }
+
       
   // ============================================================
   // 2) СООБЩЕНИЯ ЖИТЕЛЕЙ
@@ -135,41 +143,54 @@ app.post("/webhook", async (req, res) => {
   }
 
   // Заявка
-  try {
-    await axios.post(`${TELEGRAM_URL}/sendMessage`, {
-      chat_id: chatId,
-      text: "Ваша заявка принята!",
+try {
+  await axios.post(`${TELEGRAM_URL}/sendMessage`, {
+    chat_id: chatId,
+    text: "Ваша заявка принята!",
+  });
+
+  const ref = makeRef(chatId);
+  const userText = msg.text || msg.caption || "";
+
+  const header =
+    `🛠 <b>Новая заявка</b>\n\n` +
+    `От: ${msg.from?.first_name || "Житель"}\n\n`;
+  const footer = `\n\n<i>ref: ${ref}</i>`;
+
+  let sent; // сюда сохраним результат отправки в канал
+
+  if (msg.photo) {
+    const photo = msg.photo[msg.photo.length - 1];
+
+    sent = await axios.post(`${TELEGRAM_URL}/sendPhoto`, {
+      chat_id: CHANNEL_ID,
+      parse_mode: "HTML",
+      photo: photo.file_id,
+      caption: header + (userText || "(без текста)") + footer,
     });
-
-    const ref = makeRef(chatId);
-    const userText = msg.text || msg.caption || "";
-
-    const header =
-      `🛠 <b>Новая заявка</b>\n\n` +
-      `От: ${msg.from?.first_name || "Житель"}\n\n`;
-    const footer = `\n\n<i>ref: ${ref}</i>`;
-
-    if (msg.photo) {
-      const photo = msg.photo[msg.photo.length - 1];
-      await axios.post(`${TELEGRAM_URL}/sendPhoto`, {
-        chat_id: CHANNEL_ID,
-        parse_mode: "HTML",
-        photo: photo.file_id,
-        caption: header + (userText || "(без текста)") + footer,
-      });
-    } else {
-      await axios.post(`${TELEGRAM_URL}/sendMessage`, {
-        chat_id: CHANNEL_ID,
-        parse_mode: "HTML",
-        text: header + (userText || "(без текста)") + footer,
-      });
-    }
-  } catch (e) {
-    console.error("Telegram error (ticket):", e.response?.data || e.message);
+  } else {
+    sent = await axios.post(`${TELEGRAM_URL}/sendMessage`, {
+      chat_id: CHANNEL_ID,
+      parse_mode: "HTML",
+      text: header + (userText || "(без текста)") + footer,
+    });
   }
 
-  return res.sendStatus(200);
+  // ⚡ реакция на только что созданную заявку (сообщение бота в канале)
+  await axios.post(`${TELEGRAM_URL}/setMessageReaction`, {
+    chat_id: CHANNEL_ID,
+    message_id: sent.data.result.message_id,
+    reaction: [{ type: "emoji", emoji: "⚡" }],
+    is_big: false,
+  });
+
+} catch (e) {
+  console.error("Telegram error (ticket):", e.response?.data || e.message);
+}
+
+return res.sendStatus(200);
 });
+
 
 // ==== HEALTHCHECK ====
 app.get("/", (_, res) => res.send("Bot server is running!"));
