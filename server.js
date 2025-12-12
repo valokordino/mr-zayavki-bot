@@ -85,7 +85,7 @@ app.post("/webhook", async (req, res) => {
 
       const residentChatId = readRef(ref);
 
-      // Отправка ответа жителю
+      // Отправка ответа жителю (поддержка текста/фото/видео/документа)
       if (msg.photo) {
         const photo = msg.photo[msg.photo.length - 1];
         await axios.post(`${TELEGRAM_URL}/sendPhoto`, {
@@ -112,18 +112,15 @@ app.post("/webhook", async (req, res) => {
         });
       }
 
-      // ===== Реакция 👌 на исходную заявку =====
+      // ===== Реакции: снять ⚡ и поставить 👌 на исходную заявку =====
       const ticketMsgId = msg.reply_to_message.message_id;
 
-      // 1) Снять предыдущую реакцию бота (⚡)
-      // Пустой массив = убрать реакцию, которую поставил бот
       await axios.post(`${TELEGRAM_URL}/setMessageReaction`, {
         chat_id: CHANNEL_ID,
         message_id: ticketMsgId,
         reaction: [],
       });
 
-      // 2) Поставить новую реакцию 👌
       await axios.post(`${TELEGRAM_URL}/setMessageReaction`, {
         chat_id: CHANNEL_ID,
         message_id: ticketMsgId,
@@ -138,7 +135,6 @@ app.post("/webhook", async (req, res) => {
     }
   }
 
-      
   // ============================================================
   // 2) СООБЩЕНИЯ ЖИТЕЛЕЙ
   // ============================================================
@@ -154,54 +150,52 @@ app.post("/webhook", async (req, res) => {
   }
 
   // Заявка
-try {
-  await axios.post(`${TELEGRAM_URL}/sendMessage`, {
-    chat_id: chatId,
-    text: "Ваша заявка принята!",
-  });
-
-  const ref = makeRef(chatId);
-  const userText = msg.text || msg.caption || "";
-
-  const header =
-    `<b>Новая заявка</b>\n\n` +
-    `От: ${msg.from?.first_name || "Житель"}\n\n`;
-  const footer = `\n\n<i>ref: ${ref}</i>`;
-
-  let sent; // сюда сохраним результат отправки в канал
-
-  if (msg.photo) {
-    const photo = msg.photo[msg.photo.length - 1];
-
-    sent = await axios.post(`${TELEGRAM_URL}/sendPhoto`, {
-      chat_id: CHANNEL_ID,
-      parse_mode: "HTML",
-      photo: photo.file_id,
-      caption: header + (userText || "(без текста)") + footer,
+  try {
+    await axios.post(`${TELEGRAM_URL}/sendMessage`, {
+      chat_id: chatId,
+      text: "Ваша заявка принята!",
     });
-  } else {
-    sent = await axios.post(`${TELEGRAM_URL}/sendMessage`, {
+
+    const ref = makeRef(chatId);
+    const userText = msg.text || msg.caption || "";
+
+    const header =
+      `🛠 <b>Новая заявка</b>\n\n` +
+      `От: ${msg.from?.first_name || "Житель"}\n\n`;
+    const footer = `\n\n<i>ref: ${ref}</i>`;
+
+    let sent;
+
+    if (msg.photo) {
+      const photo = msg.photo[msg.photo.length - 1];
+      sent = await axios.post(`${TELEGRAM_URL}/sendPhoto`, {
+        chat_id: CHANNEL_ID,
+        parse_mode: "HTML",
+        photo: photo.file_id,
+        caption: header + (userText || "(без текста)") + footer,
+      });
+    } else {
+      sent = await axios.post(`${TELEGRAM_URL}/sendMessage`, {
+        chat_id: CHANNEL_ID,
+        parse_mode: "HTML",
+        text: header + (userText || "(без текста)") + footer,
+      });
+    }
+
+    // ⚡ реакция на только что созданную заявку
+    await axios.post(`${TELEGRAM_URL}/setMessageReaction`, {
       chat_id: CHANNEL_ID,
-      parse_mode: "HTML",
-      text: header + (userText || "(без текста)") + footer,
+      message_id: sent.data.result.message_id,
+      reaction: [{ type: "emoji", emoji: "⚡" }],
+      is_big: false,
     });
+
+  } catch (e) {
+    console.error("Telegram error (ticket):", e.response?.data || e.message);
   }
 
-  // ⚡ реакция на только что созданную заявку (сообщение бота в канале)
-  await axios.post(`${TELEGRAM_URL}/setMessageReaction`, {
-    chat_id: CHANNEL_ID,
-    message_id: sent.data.result.message_id,
-    reaction: [{ type: "emoji", emoji: "⚡" }],
-    is_big: false,
-  });
-
-} catch (e) {
-  console.error("Telegram error (ticket):", e.response?.data || e.message);
-}
-
-return res.sendStatus(200);
+  return res.sendStatus(200);
 });
-
 
 // ==== HEALTHCHECK ====
 app.get("/", (_, res) => res.send("Bot server is running!"));
