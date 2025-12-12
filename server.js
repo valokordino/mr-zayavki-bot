@@ -60,8 +60,37 @@ app.post("/webhook", async (req, res) => {
 
   // 1) Ответы сотрудников в канале (reply)
   if (String(chatId) === String(CHANNEL_ID)) {
-    try {
-      if (!msg.reply_to_message || !msg.text) return res.sendStatus(200);
+  try {
+    // Если сотрудник написал в канал, но НЕ через Reply
+    if (!msg.reply_to_message && msg.text) {
+      await axios.post(`${TELEGRAM_URL}/sendMessage`, {
+        chat_id: CHANNEL_ID,
+        reply_to_message_id: msg.message_id,
+        text:
+          "⚠️ Чтобы ответ был отправлен жителю, нажмите «Ответить (Reply)» " +
+          "на сообщение заявки бота и напишите ответ в ответе.",
+      });
+      return res.sendStatus(200);
+    }
+
+    // Если это не reply — дальше разберёт защита выше
+    if (!msg.reply_to_message) {
+  return res.sendStatus(200);
+}
+
+// Проверяем: есть ли хоть какой-то контент в ответе
+const hasContent =
+  msg.text ||
+  msg.caption ||
+  msg.photo ||
+  msg.video;
+
+if (!hasContent) {
+  return res.sendStatus(200);
+}
+
+    // дальше идёт твоя существующая логика обработки reply
+
 
       const originalText = msg.reply_to_message.text || "";
       const ref = extractRef(originalText);
