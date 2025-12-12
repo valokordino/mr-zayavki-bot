@@ -119,35 +119,7 @@ app.post("/webhook", async (req, res) => {
         reaction: [{ type: "emoji", emoji: "👌" }],
         is_big: false,
       });
-
-      // ===== Пометка "Отработано" =====
-      if (!originalText.includes("Отработано")) {
-        const updated = originalText + `\n\n<i>Отработано</i>`;
-
-        if (msg.reply_to_message.caption !== undefined) {
-          await axios.post(`${TELEGRAM_URL}/editMessageCaption`, {
-            chat_id: CHANNEL_ID,
-            message_id: msg.reply_to_message.message_id,
-            parse_mode: "HTML",
-            caption: updated,
-          });
-        } else {
-          await axios.post(`${TELEGRAM_URL}/editMessageText`, {
-            chat_id: CHANNEL_ID,
-            message_id: msg.reply_to_message.message_id,
-            parse_mode: "HTML",
-            text: updated,
-          });
-        }
-      }
-
-      return res.sendStatus(200);
-    } catch (e) {
-      console.error("Telegram error (reply):", e.response?.data || e.message);
-      return res.sendStatus(200);
-    }
-  }
-
+      
   // ============================================================
   // 2) СООБЩЕНИЯ ЖИТЕЛЕЙ
   // ============================================================
