@@ -70,7 +70,7 @@ app.post("/webhook", async (req, res) => {
           chat_id: CHANNEL_ID,
           reply_to_message_id: msg.message_id,
           text:
-            "⚠️ Чтобы ответ был отправлен жителю, нажмите «Ответить (Reply)» " +
+            "Чтобы ответ был отправлен жителю, нажмите «Ответить (Reply)» " +
             "на сообщение заявки бота и напишите ответ в ответе.",
         });
         return res.sendStatus(200);
@@ -113,9 +113,20 @@ app.post("/webhook", async (req, res) => {
       }
 
       // ===== Реакция 👌 на исходную заявку =====
+      const ticketMsgId = msg.reply_to_message.message_id;
+
+      // 1) Снять предыдущую реакцию бота (⚡)
+      // Пустой массив = убрать реакцию, которую поставил бот
       await axios.post(`${TELEGRAM_URL}/setMessageReaction`, {
         chat_id: CHANNEL_ID,
-        message_id: msg.reply_to_message.message_id,
+        message_id: ticketMsgId,
+        reaction: [],
+      });
+
+      // 2) Поставить новую реакцию 👌
+      await axios.post(`${TELEGRAM_URL}/setMessageReaction`, {
+        chat_id: CHANNEL_ID,
+        message_id: ticketMsgId,
         reaction: [{ type: "emoji", emoji: "👌" }],
         is_big: false,
       });
@@ -153,7 +164,7 @@ try {
   const userText = msg.text || msg.caption || "";
 
   const header =
-    `🛠 <b>Новая заявка</b>\n\n` +
+    `<b>Новая заявка</b>\n\n` +
     `От: ${msg.from?.first_name || "Житель"}\n\n`;
   const footer = `\n\n<i>ref: ${ref}</i>`;
 
