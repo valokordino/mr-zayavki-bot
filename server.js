@@ -57,12 +57,14 @@ app.post("/webhook", async (req, res) => {
 
   const chatId = msg.chat?.id;
   const text = msg.text || "";
+  const hasContent =
+  msg.text || msg.caption || msg.photo || msg.video || msg.document;
 
   // 1) Ответы сотрудников в канале (reply)
   if (String(chatId) === String(CHANNEL_ID)) {
   try {
     // Если сотрудник написал в канал, но НЕ через Reply
-    if (!msg.reply_to_message && msg.text) {
+   if (!msg.reply_to_message && hasContent) {
       await axios.post(`${TELEGRAM_URL}/sendMessage`, {
         chat_id: CHANNEL_ID,
         reply_to_message_id: msg.message_id,
@@ -77,13 +79,6 @@ app.post("/webhook", async (req, res) => {
     if (!msg.reply_to_message) {
   return res.sendStatus(200);
 }
-
-// Проверяем: есть ли хоть какой-то контент в ответе
-const hasContent =
-  msg.text ||
-  msg.caption ||
-  msg.photo ||
-  msg.video;
 
 if (!hasContent) {
   return res.sendStatus(200);
