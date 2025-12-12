@@ -127,13 +127,15 @@ app.post("/webhook", async (req, res) => {
     const ref = makeRef(chatId);
 
     await axios.post(`${TELEGRAM_URL}/sendMessage`, {
-      chat_id: CHANNEL_ID,
-      text:
-        `🛠 Новая заявка\n\n` +
-        `От: ${msg.from?.first_name || "Житель"}\n\n` +
-        text +
-        `\n\nref: ${ref}`,
-    });
+  chat_id: CHANNEL_ID,
+  parse_mode: "HTML",
+  text:
+    `🛠 <b>Новая заявка</b>\n\n` +
+    `От: ${msg.from?.first_name || "Житель"}\n\n` +
+    `${text}\n\n` +
+    `<i>ref: ${ref}</i>`,
+});
+
   } catch (e) {
     console.error("Telegram error (ticket):", e.response?.data || e.message);
   }
