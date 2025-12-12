@@ -112,11 +112,11 @@ app.post("/webhook", async (req, res) => {
         });
       }
 
-      // ===== Реакция ✅ на исходную заявку =====
+      // ===== Реакция 👌 на исходную заявку =====
       await axios.post(`${TELEGRAM_URL}/setMessageReaction`, {
         chat_id: CHANNEL_ID,
         message_id: msg.reply_to_message.message_id,
-        reaction: [{ type: "emoji", emoji: "✅" }],
+        reaction: [{ type: "emoji", emoji: "👌" }],
         is_big: false,
       });
 
