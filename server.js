@@ -60,11 +60,11 @@ app.post("/webhook", async (req, res) => {
   const hasContent = Boolean(msg.text || msg.caption || msg.photo || msg.video || msg.document);
 
   // ============================================================
-  // 1) СООБЩЕНИЯ СОТРУДНИКОВ В КАНАЛЕ УК (reply)
+  // 1) СООБЩЕНИЯ СОТРУДНИКОВ В КАНАЛЕ УК
   // ============================================================
   if (String(chatId) === String(CHANNEL_ID)) {
     try {
-      // Если сотрудник написал в канал, но НЕ через Reply (и там есть контент)
+      // Написали не через Reply
       if (!msg.reply_to_message && hasContent) {
         await axios.post(`${TELEGRAM_URL}/sendMessage`, {
           chat_id: CHANNEL_ID,
@@ -76,38 +76,16 @@ app.post("/webhook", async (req, res) => {
         return res.sendStatus(200);
       }
 
-      // Если это не reply — ничего не делаем
-      if (!msg.reply_to_message) return res.sendStatus(200);
+      if (!msg.reply_to_message || !hasContent) return res.sendStatus(200);
 
-      // Reply без контента — игнорируем
-      if (!hasContent) return res.sendStatus(200);
-
-      // Достаём ref из исходной заявки (из текста/подписи сообщения, на которое ответили)
-      const originalText = msg.reply_to_message.text || msg.reply_to_message.caption || "";
+      const originalText =
+        msg.reply_to_message.text || msg.reply_to_message.caption || "";
       const ref = extractRef(originalText);
+      if (!ref) return res.sendStatus(200);
 
-      if (!ref) {
-        await axios.post(`${TELEGRAM_URL}/sendMessage`, {
-          chat_id: CHANNEL_ID,
-          reply_to_message_id: msg.message_id,
-          text: "⚠️ Не нашла ref в заявке. Ответьте именно на сообщение заявки бота (Reply).",
-        });
-        return res.sendStatus(200);
-      }
+      const residentChatId = readRef(ref);
 
-      let residentChatId;
-      try {
-        residentChatId = readRef(ref);
-      } catch (e) {
-        await axios.post(`${TELEGRAM_URL}/sendMessage`, {
-          chat_id: CHANNEL_ID,
-          reply_to_message_id: msg.message_id,
-          text: "⚠️ ref не читается. Ответ не отправлен.",
-        });
-        return res.sendStatus(200);
-      }
-
-      // Отправляем жителю то же самое, что прислал сотрудник
+      // Отправка ответа жителю
       if (msg.photo) {
         const photo = msg.photo[msg.photo.length - 1];
         await axios.post(`${TELEGRAM_URL}/sendPhoto`, {
@@ -134,12 +112,34 @@ app.post("/webhook", async (req, res) => {
         });
       }
 
-      // ✅ Подтверждение в канале (можешь убрать, если не нужно)
-      await axios.post(`${TELEGRAM_URL}/sendMessage`, {
+      // ===== Реакция ✅ на исходную заявку =====
+      await axios.post(`${TELEGRAM_URL}/setMessageReaction`, {
         chat_id: CHANNEL_ID,
-        reply_to_message_id: msg.message_id,
-        text: "✅ Ответ отправлен жителю",
+        message_id: msg.reply_to_message.message_id,
+        reaction: [{ type: "emoji", emoji: "✅" }],
+        is_big: false,
       });
+
+      // ===== Пометка "Отработано" =====
+      if (!originalText.includes("Отработано")) {
+        const updated = originalText + `\n\n<i>Отработано</i>`;
+
+        if (msg.reply_to_message.caption !== undefined) {
+          await axios.post(`${TELEGRAM_URL}/editMessageCaption`, {
+            chat_id: CHANNEL_ID,
+            message_id: msg.reply_to_message.message_id,
+            parse_mode: "HTML",
+            caption: updated,
+          });
+        } else {
+          await axios.post(`${TELEGRAM_URL}/editMessageText`, {
+            chat_id: CHANNEL_ID,
+            message_id: msg.reply_to_message.message_id,
+            parse_mode: "HTML",
+            text: updated,
+          });
+        }
+      }
 
       return res.sendStatus(200);
     } catch (e) {
@@ -149,48 +149,34 @@ app.post("/webhook", async (req, res) => {
   }
 
   // ============================================================
-  // 2) СООБЩЕНИЯ ЖИТЕЛЕЙ (личка)
+  // 2) СООБЩЕНИЯ ЖИТЕЛЕЙ
   // ============================================================
-
   if (text === "/start") {
-    try {
-      await axios.post(`${TELEGRAM_URL}/sendMessage`, {
-        chat_id: chatId,
-        text:
-          "Здравствуйте! 👋\n\n" +
-          "Я бот вашего дома.\n\n" +
-          "Напишите заявку одним сообщением (можно с фото/видео/файлом). Я передам её в УК.\n\n" +
-          "Ответ придёт сюда же.\n\n" +
-          "Пожалуйста, не указывайте телефон и личные контакты — бот передаёт сообщения анонимно.",
-      });
-    } catch (e) {
-      console.error("Telegram error (start):", e.response?.data || e.message);
-    }
+    await axios.post(`${TELEGRAM_URL}/sendMessage`, {
+      chat_id: chatId,
+      text:
+        "Здравствуйте! 👋\n\n" +
+        "Напишите заявку одним сообщением (можно с фото/видео/файлом).\n" +
+        "Я передам её в управляющую компанию, ответ придёт сюда же.",
+    });
     return res.sendStatus(200);
   }
 
-  // Любое сообщение (не /start) = заявка: текст/фото/видео/документ
+  // Заявка
   try {
-    // Подтверждение жителю
     await axios.post(`${TELEGRAM_URL}/sendMessage`, {
       chat_id: chatId,
-      text: "Ваша заявка принята! Сотрудник увидит её в ближайшее время.",
+      text: "Ваша заявка принята!",
     });
 
     const ref = makeRef(chatId);
-
-    // Текст заявки (если есть): либо msg.text, либо подпись caption
     const userText = msg.text || msg.caption || "";
 
-    // Шапка
     const header =
       `🛠 <b>Новая заявка</b>\n\n` +
       `От: ${msg.from?.first_name || "Житель"}\n\n`;
-
-    // Хвост (служебное)
     const footer = `\n\n<i>ref: ${ref}</i>`;
 
-    // Публикация в канал в зависимости от типа сообщения
     if (msg.photo) {
       const photo = msg.photo[msg.photo.length - 1];
       await axios.post(`${TELEGRAM_URL}/sendPhoto`, {
@@ -199,22 +185,7 @@ app.post("/webhook", async (req, res) => {
         photo: photo.file_id,
         caption: header + (userText || "(без текста)") + footer,
       });
-    } else if (msg.video) {
-      await axios.post(`${TELEGRAM_URL}/sendVideo`, {
-        chat_id: CHANNEL_ID,
-        parse_mode: "HTML",
-        video: msg.video.file_id,
-        caption: header + (userText || "(без текста)") + footer,
-      });
-    } else if (msg.document) {
-      await axios.post(`${TELEGRAM_URL}/sendDocument`, {
-        chat_id: CHANNEL_ID,
-        parse_mode: "HTML",
-        document: msg.document.file_id,
-        caption: header + (userText || "(без текста)") + footer,
-      });
     } else {
-      // обычный текст
       await axios.post(`${TELEGRAM_URL}/sendMessage`, {
         chat_id: CHANNEL_ID,
         parse_mode: "HTML",
@@ -229,9 +200,7 @@ app.post("/webhook", async (req, res) => {
 });
 
 // ==== HEALTHCHECK ====
-app.get("/", (req, res) => {
-  res.send("Bot server is running!");
-});
+app.get("/", (_, res) => res.send("Bot server is running!"));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
